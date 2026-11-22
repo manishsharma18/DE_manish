@@ -1,0 +1,27 @@
+
+-- Flatten one JSON object per member into one row per redemption transaction.
+INSERT INTO SKYPOINTS_DB.CURATED.REDEMPTION_TXN (
+    MEMBER_ID, FEED_DATE, TXN_ID, TXN_DATE, PARTNER, MILES_REDEEMED,
+    STATUS, SOURCE_FILE, INGESTED_AT
+)
+SELECT
+    R.RAW_PAYLOAD:member_id::VARCHAR,
+    TRY_TO_DATE(R.RAW_PAYLOAD:feed_date::VARCHAR, 'YYYYMMDD'),
+    F.VALUE:txn_id::VARCHAR,
+    TRY_TO_DATE(F.VALUE:txn_date::VARCHAR, 'YYYYMMDD'),
+    F.VALUE:partner::VARCHAR,
+    TRY_TO_NUMBER(F.VALUE:miles_redeemed::VARCHAR),
+    F.VALUE:status::VARCHAR,
+    R.SOURCE_FILE,
+    R.INGESTED_AT
+FROM SKYPOINTS_DB.RAW.REDEMPTION_RAW R,
+LATERAL FLATTEN(INPUT => R.RAW_PAYLOAD:redemptions) F;
+
+-- Join to the current member profile. If IDs are not globally unique,
+-- join using the source's agreed global member key or a documented composite key.
+SELECT
+    M.MEMBER_ID, M.MEMBER_NAME, M.COUNTRY, M.TIER_CODE,
+    T.TXN_ID, T.TXN_DATE, T.PARTNER, T.MILES_REDEEMED, T.STATUS
+FROM SKYPOINTS_DB.CURATED.REDEMPTION_TXN T
+JOIN SKYPOINTS_DB.CURATED.MEMBER_CURRENT M
+  ON T.MEMBER_ID = M.MEMBER_ID;
